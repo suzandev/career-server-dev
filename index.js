@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 // middleware
@@ -28,11 +28,73 @@ async function run() {
     await client.connect();
 
     const jobsCollection = client.db("career-server-dev").collection("jobs");
+    const applicationsCollection = client
+      .db("career-server-dev")
+      .collection("applications");
 
     // job API
     app.get("/jobs", async (req, res) => {
       const cursor = jobsCollection.find();
       const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // Specific data collect with id
+    app.get("/jobs/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await jobsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // job applications related apis
+    app.get("/applications", async (req, res) => {
+      const email = req.query.email;
+
+      const pipeline = [
+        {
+          $match: { applicant: email },
+        },
+        {
+          $addFields: {
+            jobIdObj: { $toObjectId: "$jobId" },
+          },
+        },
+        {
+          $lookup: {
+            from: "jobs", // collection name
+            localField: "jobIdObj",
+            foreignField: "_id",
+            as: "jobInfo",
+          },
+        },
+        {
+          $unwind: "$jobInfo",
+        },
+        {
+          $project: {
+            name: 1,
+            phone: 1,
+            resume: 1,
+            coverLetter: 1,
+            applicant: 1,
+            jobId: 1,
+            company: "$jobInfo.company",
+            title: "$jobInfo.title",
+            company_logo: "$jobInfo.company_logo",
+          },
+        },
+      ];
+
+      const result = await applicationsCollection.aggregate(pipeline).toArray();
+
+      res.send(result);
+    });
+
+    app.post("/applications", async (req, res) => {
+      const application = req.body;
+      console.log(application);
+      const result = await applicationsCollection.insertOne(application);
       res.send(result);
     });
 
