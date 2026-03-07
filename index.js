@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const app = express();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -8,8 +9,15 @@ require("dotenv").config();
 
 // middleware
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
+app.use(cookieParser());
 
 // ====== MongoDB URI ======
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.on5po.mongodb.net/?appName=Cluster0`;
@@ -35,11 +43,38 @@ async function run() {
 
     // Jwt token related api
     app.post("/jwt", async (req, res) => {
-      const { email } = req.body;
-      const user = { email };
-      const token = jwt.sign(user, "secret", { expiresIn: "1h" });
-      res.send({ token });
+      const userData = req.body;
+
+      const token = jwt.sign(userData, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: "1d",
+      });
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "strict",
+      });
+
+      res.send({ success: true, token });
     });
+
+    // verify Token Middleware
+    const verifyToken = (req, res, next) => {
+      const token = req.cookies.token;
+
+      if (!token) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+
+      jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+
+        req.user = decoded;
+        next();
+      });
+    };
 
     // job API
     app.get("/jobs", async (req, res) => {
@@ -69,7 +104,8 @@ async function run() {
     });
 
     // job applications related apis
-    app.get("/applications", async (req, res) => {
+    app.get("/applications", verifyToken, async (req, res) => {
+      console.log("inside applications api", req.cookies);
       const email = req.query.email;
 
       const pipeline = [
