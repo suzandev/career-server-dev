@@ -52,7 +52,7 @@ async function run() {
       res.cookie("token", token, {
         httpOnly: true,
         secure: false,
-        sameSite: "strict",
+        sameSite: "lax",
       });
 
       res.send({ success: true, token });
@@ -105,8 +105,10 @@ async function run() {
 
     // job applications related apis
     app.get("/applications", verifyToken, async (req, res) => {
-      console.log("inside applications api", req.cookies);
-      const email = req.query.email;
+      // console.log("inside applications api", req.cookies);
+      console.log("decoded user:", req.user);
+
+      const email = req.user.email;
 
       const pipeline = [
         {
@@ -153,6 +155,16 @@ async function run() {
       console.log(application);
       const result = await applicationsCollection.insertOne(application);
       res.send(result);
+    });
+    //  Logout and clear cookies
+    app.post("/logout", (req, res) => {
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: false,
+        sameSite: "strict",
+      });
+
+      res.send({ success: true });
     });
 
     // Send a ping to confirm a successful connection
